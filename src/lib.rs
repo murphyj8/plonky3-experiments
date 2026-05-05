@@ -1,3 +1,4 @@
 //! plonky3-experiments: prototypes built on Plonky3 v0.5.2.
 
 pub mod field_arith;
+pub mod poly;
