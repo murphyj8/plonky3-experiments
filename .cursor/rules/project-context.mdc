@@ -1,0 +1,29 @@
+# Project: plonky3-experiments
+
+## Rust Toolchain
+- The project is pinned to Rust 1.95.0 via `rust-toolchain.toml`
+- Always verify the active toolchain with `rustup show` before coding
+- Never use `stable`, `beta`, `nightly`, or an unpinned toolchain for this repo
+- Treat `rust-toolchain.toml` as authoritative for compiler version and components
+- If any required component is missing, stop and report the exact `rustup component add --toolchain 1.95.0 ...` command needed
+- Run checks with the pinned toolchain and do not introduce code requiring a newer compiler
+
+## Stack
+- Rust (check Cargo.toml for exact crate versions)
+- Plonky3 crates from crates.io
+
+
+## Goals
+- Experiment with field arithmetic over the Goldilocks field
+- Prototype FRI-based polynomial commitments
+- Build small circuits and verify proofs end-to-end
+
+## Module Conventions
+- One module per concept: `fields/`, `fri/`, `circuits/`
+- Every public `fn` has a doc comment with a usage example
+- Tests live alongside source in `#[cfg(test)]` modules
+- Benchmarks in `benches/` using Criterion
+
+## Increment Size
+Keep each agent increment to ~100 lines as per git-workflow skill.
+Split into separate branches if a feature spans more than ~300 lines.
