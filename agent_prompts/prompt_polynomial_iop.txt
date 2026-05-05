@@ -1,0 +1,26 @@
+Read `.cursor/rules/` to understand your workflow constraints.
+Then read `Cargo.toml` to detect exact crate versions.
+Also inspect the existing Goldilocks field arithmetic module and its tests.
+
+Next feature: implement a dense polynomial representation over `GoldilocksField`.
+
+Use source-driven-development:
+- fetch the official docs or crate source matching the versions in `Cargo.toml`
+- inspect `p3-field`, `p3-matrix`, and `p3-goldilocks` usage patterns before writing code
+- do not guess APIs from memory
+
+Scope:
+- create a small dense polynomial type backed by a coefficient vector
+- support at minimum: construction, degree, evaluation at a point, zero polynomial, and simple addition
+- keep the API minimal and test-oriented
+- add focused unit tests for each supported operation
+
+Constraints:
+- keep this increment under 100 lines if possible; split if needed
+- do not touch FFT, Merkle, FRI, or circuit code yet
+- preserve the current Rust 1.95.0 toolchain policy
+
+After tests pass:
+- emit CHANGES MADE / DIDN'T TOUCH / CONCERNS
+- propose a conventional commit message
+- suggest the next prompt for wiring this polynomial type into FFT/NTT work

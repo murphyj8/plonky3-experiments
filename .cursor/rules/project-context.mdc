@@ -27,3 +27,7 @@
 ## Increment Size
 Keep each agent increment to ~100 lines as per git-workflow skill.
 Split into separate branches if a feature spans more than ~300 lines.
+
+## Toolchain policy
+- Do not change `rust-toolchain.toml` or `Cargo.toml` Rust version unless explicitly asked
+- Use the pinned Rust 1.95.0 toolchain for checks and tests
