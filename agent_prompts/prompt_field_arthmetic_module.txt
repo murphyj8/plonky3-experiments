@@ -1,0 +1,9 @@
+Read `.cursor/rules/` to understand your workflow constraints.
+Then read `Cargo.toml` to detect exact crate versions.
+
+First feature: implement a basic field arithmetic module over
+Goldilocks field (p3-goldilocks). Use source-driven-development:
+fetch the Plonky3 repo README and p3-goldilocks source before
+writing any code. Keep this increment under 100 lines. After
+tests pass, emit a CHANGES MADE / DIDN'T TOUCH / CONCERNS summary
+and propose a commit message.
