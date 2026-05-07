@@ -8,6 +8,7 @@ rust-version = "1.95.0"
 p3-field = "0.5.2"
 p3-matrix = "0.5.2"
 p3-goldilocks = "0.5.2"
+p3-dft = "0.5.2"
 p3-fri = "0.5.2"
 p3-merkle-tree = "0.5.2"
 

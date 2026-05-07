@@ -1,0 +1,27 @@
+Read `.cursor/rules/` to understand your workflow constraints.
+Then read `Cargo.toml` to detect exact crate versions.
+Inspect the current dense polynomial module and its tests before changing anything.
+
+Next feature: add FFT/NTT support using Plonky3's `p3-dft` crate.
+
+Use source-driven-development:
+- fetch the official docs or crate source matching the versions in `Cargo.toml`
+- inspect `p3-dft` APIs and any related field/domain traits required by the selected implementation
+- verify how the current polynomial representation should interoperate with the DFT layer before writing code
+
+Scope:
+- add a small adapter layer that evaluates dense polynomials over an FFT-friendly domain
+- support a forward transform path sufficient for experiments
+- prefer the smallest working integration over a generalized abstraction
+- add tests that confirm the transform output is consistent with direct polynomial evaluation on the same domain
+
+Constraints:
+- keep this increment under 100 lines if possible; split if needed
+- reuse the existing dense polynomial type rather than replacing it
+- do not implement Merkle commitments, FRI folding, or circuits yet
+- keep all code compatible with the pinned Rust toolchain
+
+After tests pass:
+- emit CHANGES MADE / DIDN'T TOUCH / CONCERNS
+- propose a conventional commit message
+- suggest the next prompt for committing polynomial evaluations with `p3-merkle-tree`

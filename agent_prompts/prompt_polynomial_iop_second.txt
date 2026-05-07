@@ -1,0 +1,47 @@
+Read `.cursor/rules/` to understand workflow constraints.
+Then read `Cargo.toml`, `src/poly.rs`, and `src/field_arith.rs`.
+
+Next feature: replace DensePoly's O(n*m) schoolbook multiplication
+with an O(n log n) NTT-based path, using `p3-dft` v0.5.2 over
+Goldilocks (TwoAdicField, TWO_ADICITY = 32).
+
+Use source-driven-development:
+- fetch `p3-dft` v0.5.2 source: `dft/src/traits.rs` and at least one
+  concrete implementation (e.g. `dft/src/radix_2_dit.rs`)
+- fetch `p3-matrix` v0.5.2 RowMajorMatrix usage:
+  https://docs.rs/p3-matrix/0.5.2/p3_matrix/dense/struct.RowMajorMatrix.html
+- confirm DensePoly's low-to-high coefficient ordering is what
+  `p3-dft` expects (`y_i = sum_j c_j (s g^i)^j`)
+
+Scope:
+- add `p3-dft = "0.5.2"` to Cargo.toml in a separate first commit
+  (chore:), since this is a dependency change
+- add `pub fn coeffs(&self) -> &[Goldilocks]` accessor on DensePoly
+- add `DensePoly::ntt(&self) -> Vec<Goldilocks>` — pad to next power
+  of two and apply the forward DFT over the order-n two-adic subgroup
+- add `DensePoly::from_evaluations(values: Vec<Goldilocks>) -> Self`
+  using the inverse DFT, then strip trailing zeros
+- add `DensePoly::mul_via_ntt(&self, rhs: &DensePoly) -> DensePoly`
+  that pads to length >= deg(f) + deg(g) + 1 (next pow2), DFTs both,
+  pointwise-multiplies, inverse-DFTs, and strips trailing zeros
+- tests:
+  * round-trip: from_evaluations(p.ntt()) == p (for several p)
+  * spec: ntt(p)[i] == p.evaluate(g^i) where g = two_adic_generator
+  * cross-check: schoolbook (Mul) and NTT multiplication agree on
+    several random polynomials (use a seeded p3-field RNG, not
+    rand::random)
+
+Constraints:
+- target ~150 lines for the increment; split into 2 commits if
+  helpful (chore:add p3-dft dep, then feat:NTT multiplication)
+- do not touch FRI, Merkle, or circuit code
+- keep Rust 1.95.0 toolchain pin
+- don't remove the schoolbook Mul impl yet — keep both, with NTT
+  reachable via mul_via_ntt; a future increment can switch the
+  default once benchmarks justify it
+
+After tests pass:
+- emit CHANGES MADE / DIDN'T TOUCH / CONCERNS
+- propose conventional commit messages (one per atomic change)
+- suggest the next prompt for low-degree extension or vanishing
+  polynomial construction over a coset

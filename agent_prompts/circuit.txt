@@ -1,0 +1,28 @@
+Read `.cursor/rules/` to understand your workflow constraints.
+Then read `Cargo.toml` to detect exact crate versions.
+Inspect the current polynomial, FFT/NTT, Merkle commitment, and FRI modules and tests.
+
+Next feature: build a simple experimental constraint system wired to the existing primitives.
+
+Use source-driven-development:
+- fetch the official docs or crate source matching the versions in `Cargo.toml`
+- inspect the Plonky3 crates needed for a minimal constraint or trace-based proving flow
+- verify how the current polynomial/evaluation/commitment/FRI pieces should compose before writing code
+- if there is no single official “simple circuit” API for the detected versions, state that clearly and implement the smallest verified constraint-oriented example supported by the current crates
+
+Scope:
+- implement one tiny end-to-end example, such as proving a low-degree relation or a simple recurrence over Goldilocks values
+- wire witness generation to polynomial/evaluation generation
+- route evaluations through the existing commitment and FRI path
+- add tests for the smallest successful proof-style flow the current crate versions support
+
+Constraints:
+- keep this increment under 100 lines if possible; split if needed
+- prefer a minimal experimental example over a generalized framework
+- do not refactor earlier modules unless required for correctness
+- keep all abstractions transparent and easy to inspect
+
+After tests pass:
+- emit CHANGES MADE / DIDN'T TOUCH / CONCERNS
+- propose a conventional commit message
+- identify the next likely refactor or hardening step without implementing it

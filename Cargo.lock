@@ -592,6 +592,7 @@ name = "plonky3-experiments"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "p3-dft",
  "p3-field",
  "p3-fri",
  "p3-goldilocks",

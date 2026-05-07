@@ -1,0 +1,27 @@
+Read `.cursor/rules/` to understand your workflow constraints.
+Then read `Cargo.toml` to detect exact crate versions.
+Inspect the existing dense polynomial and FFT/NTT modules and their tests.
+
+Next feature: implement a Merkle commitment over polynomial evaluations using `p3-merkle-tree`.
+
+Use source-driven-development:
+- fetch the official docs or crate source matching the versions in `Cargo.toml`
+- inspect `p3-merkle-tree` APIs, required hash/challenger traits, and expected input layout before writing code
+- verify whether the crate expects rows, leaves, packed values, or another evaluation structure
+
+Scope:
+- take the evaluation vector produced by the FFT/NTT layer
+- build a minimal Merkle commitment wrapper around it
+- expose a small result type containing at least the commitment root or cap plus any data needed for later openings
+- add tests for deterministic commitment behavior on fixed evaluation inputs
+
+Constraints:
+- keep this increment under 100 lines if possible; split if needed
+- do not implement full opening proofs unless the crate requires a minimal opening path for correctness
+- do not start FRI query logic or circuit wiring yet
+- keep the abstraction narrow and composable for the next step
+
+After tests pass:
+- emit CHANGES MADE / DIDN'T TOUCH / CONCERNS
+- propose a conventional commit message
+- suggest the next prompt for integrating `p3-fri` over the committed evaluations

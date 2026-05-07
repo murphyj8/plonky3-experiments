@@ -6,10 +6,12 @@
 //!
 //! Sources (Plonky3 v0.5.2):
 //! - https://github.com/Plonky3/Plonky3/blob/v0.5.2/dft/src/traits.rs
+//! - https://github.com/Plonky3/Plonky3/blob/v0.5.2/dft/src/lib.rs
 //! - https://github.com/Plonky3/Plonky3/blob/v0.5.2/goldilocks/src/goldilocks.rs
 
 use core::ops::{Add, Mul, Neg, Sub};
 
+use p3_dft::{Radix2Dit, TwoAdicSubgroupDft};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_goldilocks::Goldilocks;
 
@@ -51,6 +53,66 @@ impl DensePoly {
             .rev()
             .copied()
             .fold(Goldilocks::ZERO, |acc, c| acc * x + c)
+    }
+
+    /// Borrow the canonical low-to-high coefficient slice. Useful for
+    /// handing the polynomial off to `RowMajorMatrix::new_col` or
+    /// `Radix2Dit::dft`, which expect `coeffs[i]` to be the coefficient of `x^i`.
+    pub fn coeffs(&self) -> &[Goldilocks] {
+        &self.coeffs
+    }
+
+    /// Evaluations of `self` on the order-`n` two-adic subgroup of `F_p^*`,
+    /// where `n = self.coeffs.len()` rounded up to the next power of two
+    /// (and `1` for the zero polynomial). The returned vector has length `n`,
+    /// indexed by `i ↦ self.evaluate(g^i)` with `g = two_adic_generator(log2 n)`.
+    ///
+    /// Source: `TwoAdicSubgroupDft::dft` in `p3-dft` v0.5.2 — "Treating
+    /// `vec` as coefficients of a polynomial, compute the evaluations of
+    /// that polynomial on the subgroup `H`."
+    pub fn ntt(&self) -> Vec<Goldilocks> {
+        let n = self.coeffs.len().max(1).next_power_of_two();
+        let mut padded = self.coeffs.clone();
+        padded.resize(n, Goldilocks::ZERO);
+        Radix2Dit::default().dft(padded)
+    }
+
+    /// Reconstruct a polynomial from its evaluations on the order-`n`
+    /// two-adic subgroup, where `n = values.len()` must be a power of two
+    /// (or zero, which yields the zero polynomial). Trailing zeros are
+    /// stripped so the result is canonical.
+    ///
+    /// Source: `TwoAdicSubgroupDft::idft` in `p3-dft` v0.5.2.
+    pub fn from_evaluations(values: Vec<Goldilocks>) -> Self {
+        if values.is_empty() {
+            return Self::zero();
+        }
+        assert!(
+            values.len().is_power_of_two(),
+            "from_evaluations requires a power-of-two length, got {}",
+            values.len()
+        );
+        Self::new(Radix2Dit::default().idft(values))
+    }
+
+    /// Multiply two polynomials in `O(n log n)` time via the NTT.
+    /// Mathematically equivalent to `&self * rhs` from the schoolbook impl;
+    /// kept alongside it so the slow path remains available for sanity checks.
+    pub fn mul_via_ntt(&self, rhs: &DensePoly) -> DensePoly {
+        if self.is_zero() || rhs.is_zero() {
+            return DensePoly::zero();
+        }
+        let needed = self.coeffs.len() + rhs.coeffs.len() - 1;
+        let n = needed.next_power_of_two();
+        let dft = Radix2Dit::default();
+        let mut a = self.coeffs.clone();
+        let mut b = rhs.coeffs.clone();
+        a.resize(n, Goldilocks::ZERO);
+        b.resize(n, Goldilocks::ZERO);
+        let ea = dft.dft(a);
+        let eb = dft.dft(b);
+        let pointwise: Vec<_> = ea.iter().zip(&eb).map(|(x, y)| *x * *y).collect();
+        DensePoly::new(dft.idft(pointwise))
     }
 
     /// Polynomial long division: returns `(quotient, remainder)` such that
@@ -256,5 +318,62 @@ mod tests {
     #[should_panic(expected = "division by zero polynomial")]
     fn divmod_panics_on_zero_divisor() {
         let _ = p(&[1, 2, 3]).divmod(&DensePoly::zero());
+    }
+
+    /// Tiny seeded LCG so test polynomials are deterministic without needing
+    /// `rand` as a dev-dep. The constant is splittable-mix64's golden ratio.
+    fn det_poly(seed: u64, n: usize) -> DensePoly {
+        let mut s = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        DensePoly::new(
+            (0..n)
+                .map(|_| {
+                    s = s.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(0x1234_5678);
+                    from_u64(s)
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn ntt_round_trip() {
+        for seed in 0..6 {
+            let f = det_poly(seed, 5);
+            assert_eq!(DensePoly::from_evaluations(f.ntt()), f, "seed = {seed}");
+        }
+    }
+
+    #[test]
+    fn ntt_matches_pointwise_evaluation() {
+        // For a length-4 input the DFT subgroup has order 4 with generator
+        // g = two_adic_generator(2). Output[i] must equal f.evaluate(g^i).
+        let f = p(&[1, 2, 3, 4]);
+        let evals = f.ntt();
+        let g = crate::field_arith::two_adic_generator(2);
+        for (i, eval) in evals.iter().enumerate() {
+            assert_eq!(*eval, f.evaluate(g.exp_u64(i as u64)), "i = {i}");
+        }
+    }
+
+    #[test]
+    fn mul_via_ntt_matches_schoolbook() {
+        for seed in 0..6 {
+            let f = det_poly(seed, 7);
+            let g = det_poly(seed.wrapping_add(100), 5);
+            assert_eq!(f.mul_via_ntt(&g), &f * &g, "seed = {seed}");
+        }
+    }
+
+    #[test]
+    fn ntt_handles_zero_polynomial() {
+        let z = DensePoly::zero();
+        let evals = z.ntt();
+        assert!(evals.iter().all(|x| *x == Goldilocks::ZERO));
+        assert_eq!(DensePoly::from_evaluations(evals), z);
+    }
+
+    #[test]
+    #[should_panic(expected = "power-of-two")]
+    fn from_evaluations_rejects_non_power_of_two() {
+        let _ = DensePoly::from_evaluations(vec![Goldilocks::ZERO; 3]);
     }
 }

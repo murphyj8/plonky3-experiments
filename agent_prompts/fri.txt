@@ -1,0 +1,28 @@
+Read `.cursor/rules/` to understand your workflow constraints.
+Then read `Cargo.toml` to detect exact crate versions.
+Inspect the current polynomial, FFT/NTT, and Merkle commitment modules before making changes.
+
+Next feature: implement a minimal FRI low-degree test flow using `p3-fri` over the committed polynomial evaluations.
+
+Use source-driven-development:
+- fetch the official docs or crate source matching the versions in `Cargo.toml`
+- inspect `p3-fri` parameters, traits, and prover/verifier flow before writing code
+- determine the smallest valid experimental integration with the existing FFT and Merkle layers
+- do not assume the API shape from older Plonky3 examples
+
+Scope:
+- define a minimal parameter/config object for an experimental FRI run
+- connect the existing evaluation/commitment pipeline to the FRI entry points
+- support one end-to-end low-degree test path over a small example polynomial
+- add tests that exercise a successful low-degree proof/verification path, or if full verification is too large for one increment, land the prover/config slice first with clear tests around setup invariants
+
+Constraints:
+- keep this increment under 100 lines if possible; split if needed
+- preserve separation of concerns between polynomial representation, evaluation, commitment, and FRI orchestration
+- do not begin circuit wiring in this step
+- if the required integration is larger than one safe increment, stop after the first coherent slice and explain the remaining steps
+
+After tests pass:
+- emit CHANGES MADE / DIDN'T TOUCH / CONCERNS
+- propose a conventional commit message
+- suggest the next prompt for wiring these primitives into a simple constraint system
