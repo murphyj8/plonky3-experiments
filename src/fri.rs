@@ -1,36 +1,39 @@
 //! FRI low-degree-test scaffolding for Goldilocks evaluations.
 //!
-//! This module wires the existing [`crate::merkle::GoldilocksMmcs`] into the
-//! `p3-fri` v0.5.2 polynomial commitment scheme `TwoAdicFriPcs` — the canonical
+//! Wires the existing [`crate::merkle::GoldilocksMmcs`] into the `p3-fri`
+//! v0.5.2 polynomial commitment scheme `TwoAdicFriPcs` — the canonical
 //! user-facing entry point that internally drives `prove_fri` / `verify_fri`.
 //!
-//! Increment scope (slice 1):
-//! - Type aliases pinning the full FRI stack for Goldilocks.
-//! - Deterministic builders for the FRI parameters, the PCS, and the
+//! Module surface:
+//! - **Slice 1 — setup**: type aliases pinning the full FRI stack for
+//!   Goldilocks, deterministic builders for the FRI parameters, PCS, and
 //!   matching Fiat-Shamir challenger, all parameterised by a single `seed`.
-//! - Setup-invariant tests confirming the parameter math, deterministic
-//!   challenger sampling, and that the PCS itself is constructible.
-//!
-//! The end-to-end commit / open / verify round-trip lands in slice 2 — see
-//! `agent_prompts/` for the next prompt.
+//! - **Slice 2 — round-trip**: [`prove_low_degree`] and [`verify_low_degree`]
+//!   implement a single-polynomial commit → open → verify path on top of
+//!   the slice-1 scaffolding, mirroring the BabyBear template at
+//!   `fri/tests/fri.rs` adapted to a single matrix / single column / single
+//!   opening point.
 //!
 //! Sources (Plonky3 v0.5.2):
 //! - https://github.com/Plonky3/Plonky3/blob/v0.5.2/fri/src/lib.rs
 //! - https://github.com/Plonky3/Plonky3/blob/v0.5.2/fri/src/config.rs
 //! - https://github.com/Plonky3/Plonky3/blob/v0.5.2/fri/src/two_adic_pcs.rs
 //! - https://github.com/Plonky3/Plonky3/blob/v0.5.2/fri/tests/fri.rs (BabyBear template)
+//! - https://github.com/Plonky3/Plonky3/blob/v0.5.2/commit/src/pcs.rs (Pcs trait)
 //! - https://github.com/Plonky3/Plonky3/blob/v0.5.2/goldilocks/src/extension.rs
 
-use p3_challenger::DuplexChallenger;
-use p3_commit::ExtensionMmcs;
+use p3_challenger::{CanObserve, DuplexChallenger, FieldChallenger};
+use p3_commit::{ExtensionMmcs, Pcs as PcsTrait};
 use p3_dft::Radix2Dit;
 use p3_field::extension::BinomialExtensionField;
 use p3_fri::{FriParameters, TwoAdicFriPcs, create_test_fri_params};
 use p3_goldilocks::Goldilocks;
+use p3_matrix::dense::RowMajorMatrix;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
 
 use crate::merkle::{GoldilocksMmcs, Perm, RATE, WIDTH, make_mmcs};
+use crate::poly::DensePoly;
 
 /// Base field for trace polynomials.
 pub type Val = Goldilocks;
@@ -77,6 +80,92 @@ pub fn make_challenger(seed: u64) -> Challenger {
     let mut rng = SmallRng::seed_from_u64(seed);
     let perm = Perm::new_from_rng_128(&mut rng);
     Challenger::new(perm)
+}
+
+/// PCS-side associated types, surfaced as crate-level aliases for ergonomic
+/// signatures in [`LowDegreeProof`] / [`prove_low_degree`] / [`verify_low_degree`].
+pub type Domain = <Pcs as PcsTrait<Challenge, Challenger>>::Domain;
+pub type Commitment = <Pcs as PcsTrait<Challenge, Challenger>>::Commitment;
+pub type Proof = <Pcs as PcsTrait<Challenge, Challenger>>::Proof;
+pub type VerifyError = <Pcs as PcsTrait<Challenge, Challenger>>::Error;
+
+/// Output of [`prove_low_degree`]. Bundles everything the verifier needs
+/// (commitment, claimed evaluation, FRI proof, trace size) plus the
+/// prover-side `zeta` for diagnostics.
+pub struct LowDegreeProof {
+    /// Sent to the verifier. The Merkle cap over the LDE evaluations.
+    pub commitment: Commitment,
+    /// Claimed value `f(zeta)` at the FRI opening point, sent to the verifier.
+    pub opened_value: Challenge,
+    /// FRI low-degree-test proof produced by `TwoAdicFriPcs::open`.
+    pub proof: Proof,
+    /// `log2` of the trace domain size — public, both sides need it to
+    /// reconstruct the natural domain.
+    pub log_height: usize,
+    /// Opening point sampled by the prover. The verifier re-derives this from
+    /// its own challenger and ignores the field; included for diagnostics.
+    pub zeta: Challenge,
+}
+
+/// Commit to a [`DensePoly`] via its NTT evaluations on the natural 2-adic
+/// subgroup, observe the commitment in the transcript, sample an opening
+/// point ζ via Fiat-Shamir, open at ζ, and produce a FRI proof.
+///
+/// The matrix is single-column (one polynomial), the batch is single-element
+/// (one commitment), and there is one opening point (`zeta`). For multi-poly
+/// batching, see the upstream BabyBear template at `fri/tests/fri.rs`.
+pub fn prove_low_degree(
+    pcs: &Pcs,
+    poly: &DensePoly,
+    challenger: &mut Challenger,
+) -> LowDegreeProof {
+    let evals = poly.ntt();
+    assert!(
+        evals.len() >= 2,
+        "polynomial must yield at least 2 NTT evaluations (got {})",
+        evals.len()
+    );
+    let height = evals.len();
+    let log_height = height.trailing_zeros() as usize;
+
+    let domain =
+        <Pcs as PcsTrait<Challenge, Challenger>>::natural_domain_for_degree(pcs, height);
+    let mat = RowMajorMatrix::new(evals, 1);
+
+    let (commitment, prover_data) =
+        <Pcs as PcsTrait<Challenge, Challenger>>::commit(pcs, vec![(domain, mat)]);
+
+    challenger.observe(commitment.clone());
+    let zeta: Challenge = challenger.sample_algebra_element();
+
+    let open_data = vec![(&prover_data, vec![vec![zeta]])];
+    let (opened_values, proof) = pcs.open(open_data, challenger);
+    let opened_value = opened_values[0][0][0][0];
+
+    LowDegreeProof { commitment, opened_value, proof, log_height, zeta }
+}
+
+/// Verify a [`LowDegreeProof`]. The verifier re-derives `zeta` from its own
+/// challenger after observing the commitment; `proof.zeta` is not consulted.
+pub fn verify_low_degree(
+    pcs: &Pcs,
+    proof: &LowDegreeProof,
+    challenger: &mut Challenger,
+) -> Result<(), VerifyError> {
+    challenger.observe(proof.commitment.clone());
+    let zeta: Challenge = challenger.sample_algebra_element();
+
+    let domain = <Pcs as PcsTrait<Challenge, Challenger>>::natural_domain_for_degree(
+        pcs,
+        1 << proof.log_height,
+    );
+
+    let commitments_with_opening_points = vec![(
+        proof.commitment.clone(),
+        vec![(domain, vec![(zeta, vec![proof.opened_value])])],
+    )];
+
+    pcs.verify(commitments_with_opening_points, &proof.proof, challenger)
 }
 
 #[cfg(test)]
@@ -137,5 +226,67 @@ mod tests {
         // samples by chance is 2^-64, well below any reasonable test flake rate.
         let collisions = (0..4).filter(|_| a.sample_bits(16) == b.sample_bits(16)).count();
         assert!(collisions < 4, "challengers from different seeds should not all agree");
+    }
+
+    use crate::field_arith::from_u64;
+    use p3_field::PrimeCharacteristicRing;
+
+    fn small_poly() -> DensePoly {
+        // 8 coefficients → log_height = 3 trace, log_lde = 5 with log_blowup = 2.
+        DensePoly::new((1u64..=8).map(from_u64).collect())
+    }
+
+    #[test]
+    fn round_trip_proves_and_verifies() {
+        let seed = 7;
+        let pcs = make_pcs(seed, 0);
+        let mut p_chal = make_challenger(seed);
+        let proof = prove_low_degree(&pcs, &small_poly(), &mut p_chal);
+
+        let mut v_chal = make_challenger(seed);
+        verify_low_degree(&pcs, &proof, &mut v_chal)
+            .expect("honest proof should verify");
+    }
+
+    #[test]
+    fn prover_and_verifier_derive_the_same_zeta() {
+        let seed = 13;
+        let pcs = make_pcs(seed, 0);
+        let mut p_chal = make_challenger(seed);
+        let proof = prove_low_degree(&pcs, &small_poly(), &mut p_chal);
+
+        // Replay the verifier's transcript prefix to confirm zeta agreement.
+        let mut v_chal = make_challenger(seed);
+        v_chal.observe(proof.commitment.clone());
+        let zeta_v: Challenge = v_chal.sample_algebra_element();
+        assert_eq!(proof.zeta, zeta_v, "Fiat-Shamir transcripts must agree on zeta");
+    }
+
+    #[test]
+    fn tampered_opened_value_is_rejected() {
+        let seed = 7;
+        let pcs = make_pcs(seed, 0);
+        let mut p_chal = make_challenger(seed);
+        let mut proof = prove_low_degree(&pcs, &small_poly(), &mut p_chal);
+
+        proof.opened_value += Challenge::ONE;
+
+        let mut v_chal = make_challenger(seed);
+        verify_low_degree(&pcs, &proof, &mut v_chal)
+            .expect_err("tampering with opened_value must fail verification");
+    }
+
+    #[test]
+    fn tampered_proof_final_poly_is_rejected() {
+        let seed = 7;
+        let pcs = make_pcs(seed, 0);
+        let mut p_chal = make_challenger(seed);
+        let mut proof = prove_low_degree(&pcs, &small_poly(), &mut p_chal);
+
+        proof.proof.final_poly[0] += Challenge::ONE;
+
+        let mut v_chal = make_challenger(seed);
+        verify_low_degree(&pcs, &proof, &mut v_chal)
+            .expect_err("tampering with proof.final_poly must fail verification");
     }
 }

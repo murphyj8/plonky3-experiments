@@ -25,11 +25,16 @@ use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
 
-const WIDTH: usize = 8;
-const RATE: usize = 4;
+/// Width of the Poseidon2 permutation backing every hash/compression/challenger
+/// over Goldilocks in this crate. Shared with `crate::fri` so a single seed
+/// produces the same `Perm` instance for the MMCS and the Fiat-Shamir transcript.
+pub const WIDTH: usize = 8;
+/// Sponge / challenger absorption rate (capacity = `WIDTH - RATE` = 4).
+pub const RATE: usize = 4;
 const DIGEST_ELEMS: usize = 4;
 
-type Perm = Poseidon2Goldilocks<WIDTH>;
+/// Width-8 Poseidon2 over Goldilocks. Shared between this module and `crate::fri`.
+pub type Perm = Poseidon2Goldilocks<WIDTH>;
 type Hasher = PaddingFreeSponge<Perm, WIDTH, RATE, DIGEST_ELEMS>;
 type Compress = TruncatedPermutation<Perm, 2, DIGEST_ELEMS, WIDTH>;
 
