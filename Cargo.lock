@@ -438,6 +438,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
+name = "p3-air"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f2ec9cbfc642fc5173817287c3f8b789d07743b5f7e812d058b7a03e344f9ab"
+dependencies = [
+ "p3-field",
+ "p3-matrix",
+ "tracing",
+]
+
+[[package]]
 name = "p3-challenger"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -665,6 +676,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "p3-uni-stark"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c4ecaad8a7b4cf0fc711278c7a29fdc6d14239157866b17feaf14061834bc51"
+dependencies = [
+ "itertools 0.14.0",
+ "p3-air",
+ "p3-challenger",
+ "p3-commit",
+ "p3-field",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-util",
+ "serde",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "p3-util"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -701,6 +731,7 @@ name = "plonky3-experiments"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "p3-air",
  "p3-challenger",
  "p3-commit",
  "p3-dft",
@@ -710,6 +741,7 @@ dependencies = [
  "p3-matrix",
  "p3-merkle-tree",
  "p3-symmetric",
+ "p3-uni-stark",
  "rand",
 ]
 
