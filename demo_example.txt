@@ -1,0 +1,54 @@
+SUGGESTED SALES DEMO
+The hardest part of selling STARKs to non-technical buyers is the succinctness property: that a prover can do an enormous amount of work and the verifier can check it in a tiny fraction of that time, and that the verifier doesn't need to trust the prover. Concretely:
+
+The prover does the work; the verifier just checks the receipt — and the receipt is unforgeable.
+
+The cleanest demo I can imagine, building directly on SumAir, is a two-pane web app or CLI with a stopwatch:
+
+Concept: "Prove the counter"
+A single web page (or two side-by-side terminals) labelled PROVER and AUDITOR:
+
+Setup (sales person on stage):
+
+Slider: "How many steps? n = 2^k where k from 3 to 20"
+"Starting number: init" input
+The prover shows a live counter ticking up n times, then says: "I claim acc_final = init + (n-1)".
+Prove button (PROVER pane):
+
+On click, runs generate_sum_trace(init, n) + prove_stark(...).
+Shows two clocks:
+Time spent computing the answer (the trace)
+Time spent producing the proof (the prover)
+Shows proof size in KB.
+Outputs a small text "receipt" the auditor can copy.
+Verify button (AUDITOR pane):
+
+Auditor pastes the receipt + the claimed acc_final value.
+On click, runs verify_stark(...).
+Shows the verify clock — typically tens of milliseconds, almost flat regardless of n.
+Big green ✓ "VERIFIED" or red ✗ "REJECTED".
+The "aha" moment — three live demonstrations for the audience:
+
+Scale: bump the slider from n = 2^10 to n = 2^20. Prove time multiplies by ~1000×. Verify time stays nearly constant. Sales pitch: "the prover scales with the work; the verifier doesn't."
+Tampering: auditor edits one digit of acc_final in the receipt before clicking Verify. Instantly rejected. Sales pitch: "the receipt is mathematically tamper-evident."
+No re-execution: emphasise that the auditor never had to re-run the loop. The verifier checks the receipt, not the work. Sales pitch: "your customer can audit a million-step calculation without doing a million steps."
+Why SumAir (not FibonacciAir) is the right vehicle
+Counting up by 1 is something everyone can picture: "I claim I added 1 to a counter a million times".
+The "expected output" is a single number any audience member can compute on their phone for small n, then for large n they have to trust the proof — which is exactly the moment you want them to feel.
+The AIR has only one main column, two public inputs, and one transition constraint, so it doesn't bury the message in mathematical detail.
+Stretch (one slide, no code)
+After the live demo, one diagram showing where this fits:
+
+┌─────────────────────────────────────────────────────────┐
+│  Trusted: math (Goldilocks field, FRI, Merkle trees)    │
+│  Untrusted: the party doing the work (the prover)       │
+│  Cheap: the party checking the work (the verifier)      │
+└─────────────────────────────────────────────────────────┘
+Pair with one-line industry hooks the sales team can plug into their own scripts, e.g.:
+
+Finance: "audit a year of trades without re-running the books"
+Supply chain: "verify a chain of custody without seeing every leg"
+AI: "prove a model produced this output, without revealing the weights"
+The implementation cost for this demo is low: a small Axum/Actix web server wrapping make_stark_config + prove_stark + verify_stark, with a one-page React or HTML/JS frontend. The Rust side already exists; the demo is mostly UX glue. Realistic effort: half a day to a day.
+
+If you want, the next prompt can be: "Build a minimal Axum web server exposing POST /prove and POST /verify wrapping prove_stark / verify_stark over SumAir, with a single static HTML page that renders the two-pane stopwatch demo above. Keep the increment under ~250 lines (server + frontend combined). No new top-level dependencies beyond axum, tokio, and serde."
