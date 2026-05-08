@@ -44,7 +44,7 @@ pub fn make_stark_config(seed: u64, log_final_poly_len: usize) -> StarkConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::air::{FibonacciAir, generate_fibonacci_trace};
+    use crate::air::{FibonacciAir, SumAir, generate_fibonacci_trace, generate_sum_trace};
     use crate::field_arith::from_u64;
     use p3_field::PrimeCharacteristicRing;
     use p3_goldilocks::Goldilocks;
@@ -76,5 +76,63 @@ mod tests {
     fn wrong_public_input_is_rejected() {
         let (config, pis, trace) = fib_setup(8, 999);
         let _ = prove_stark(&config, &FibonacciAir, trace, &pis);
+    }
+
+    fn sum_setup(
+        n: usize,
+        init: u64,
+        claimed_final: u64,
+    ) -> (StarkConfig, Vec<Goldilocks>, RowMajorMatrix<Goldilocks>) {
+        let trace = generate_sum_trace(init, n);
+        let config = make_stark_config(1, 0);
+        let pis = vec![from_u64(init), from_u64(claimed_final)];
+        (config, pis, trace)
+    }
+
+    #[test]
+    fn running_sum_round_trip() {
+        // init = 0, n = 8 → row 7 holds acc = 7. Honest claim: acc_final = 7.
+        let (config, pis, trace) = sum_setup(8, 0, 7);
+        let proof = prove_stark(&config, &SumAir, trace, &pis);
+        verify_stark(&config, &SumAir, &proof, &pis)
+            .expect("honest running-sum STARK should verify");
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "constraints not satisfied on row")]
+    fn running_sum_wrong_final_is_rejected() {
+        // Honest trace ends at acc=7, but we claim acc_final=999. The prover's
+        // debug-build constraint check fails on the last row.
+        let (config, pis, trace) = sum_setup(8, 0, 999);
+        let _ = prove_stark(&config, &SumAir, trace, &pis);
+    }
+
+    /// Release-mode negative test: produce an honest proof, then mutate one
+    /// element of `opened_values.trace_local`. The verifier observes the
+    /// tampered claim, but the FRI opening proof was generated against the
+    /// original value and the commitment binds it — `pcs.verify` must reject
+    /// before the constraint check ever runs, yielding
+    /// `InvalidOpeningArgument(_)`. The `OodEvaluationMismatch` arm is
+    /// matched too so the test stays correct if upstream ever reorders the
+    /// verifier's checks.
+    ///
+    /// Source: https://github.com/Plonky3/Plonky3/blob/v0.5.2/uni-stark/src/verifier.rs
+    #[test]
+    fn tampered_trace_local_is_rejected() {
+        use crate::fri::Challenge;
+        let (config, pis, trace) = fib_setup(8, 21);
+        let mut proof = prove_stark(&config, &FibonacciAir, trace, &pis);
+        proof.opened_values.trace_local[0] += Challenge::ONE;
+
+        let result = verify_stark(&config, &FibonacciAir, &proof, &pis);
+        assert!(
+            matches!(
+                result,
+                Err(StarkError::InvalidOpeningArgument(_))
+                    | Err(StarkError::OodEvaluationMismatch { .. })
+            ),
+            "expected InvalidOpeningArgument or OodEvaluationMismatch, got {result:?}"
+        );
     }
 }

@@ -13,5 +13,4 @@ https://github.com/addyosmani/agent-skills
 https://nooneshappy.com/article/appearing-productive-in-the-workplace/
 
 
-And please read the document cursor-agent-setup-rust-plonky3.md. It describes the process I followed after giving the agent 2 skils (git-workflow & source-driven-development)
-
+And please read the document cursor-agent-setup-rust-plonky3.md. It describes the process I followed after giving the agent 2 skils (git-workflow & source-driven-development
